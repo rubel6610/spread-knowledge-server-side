@@ -52,7 +52,7 @@ async function run() {
     });
 
     //article related api
-    app.post("/articles", async (req, res) => {
+    app.post("/articles",verifyToken, async (req, res) => {
       const articles = req.body;
       articles.likes = 0;
       const result = await articleCollections.insertOne(articles);
@@ -69,7 +69,7 @@ async function run() {
       const result = await articleCollections.findOne(query);
       res.send(result);
     });
-    app.patch("/articles/:id", async (req, res) => {
+    app.patch("/articles/:id",verifyToken, async (req, res) => {
       const id = req.params.id;
       const { likes } = req.body;
       const query = { _id: new ObjectId(id) };
@@ -81,7 +81,7 @@ async function run() {
       const result = await articleCollections.updateOne(query, updatedDoc);
       res.send(result);
     });
-    app.post("/comments", async (req, res) => {
+    app.post("/comments",verifyToken, async (req, res) => {
       const comments = req.body;
       const result = await commentsCollections.insertOne(comments);
       res.send(result);
@@ -101,7 +101,7 @@ async function run() {
       const result = await articleCollections.find(query).toArray();
       res.send(result);
     });
-    app.put("/updatearticles/:id", async (req, res) => {
+    app.put("/updatearticles/:id",verifyToken, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
       const updatedPost = req.body;
@@ -111,7 +111,7 @@ async function run() {
       const result = await articleCollections.updateOne(filter, updatedDoc);
       res.send(result);
     });
-    app.delete("/myarticles/:id", async (req, res) => {
+    app.delete("/myarticles/:id",verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await articleCollections.deleteOne(query);

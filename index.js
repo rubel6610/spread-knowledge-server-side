@@ -9,7 +9,11 @@ const port = 3000;
 
 //middleware
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: ["http://localhost:5173", "https://knowledge-spread.netlify.app"],
+  credentials: true
+}));
+
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster3.xb4kix2.mongodb.net/?retryWrites=true&w=majority&appName=Cluster3`;
 
@@ -36,15 +40,30 @@ const verifyToken = async (req, res, next) => {
     next();
   });
 };
+const verifyEmail = (req, res, next) => {
+  const requestedEmail = req.query.email || req.body.email;
+
+  if (!requestedEmail) {
+    return res.status(400).send({ message: "Email is required" });
+  }
+
+  if (req.decoded?.email !== requestedEmail) {
+    return res.status(403).send({ message: "Forbidden: Email mismatch" });
+  }
+
+  next();
+};
 
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     const db = client.db("spread_knowledge");
     const usersCollections = db.collection("users");
     const articleCollections = db.collection("articles");
     const commentsCollections = db.collection("comments");
+
+    
     app.post("/user", async (req, res) => {
       const userData = req.body;
       const result = await usersCollections.insertOne(userData);
@@ -65,20 +84,20 @@ async function run() {
 
     app.get("/articles/:id", async (req, res) => {
       const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const result = await articleCollections.findOne(query);
+      const filter = { _id: new ObjectId(id) };
+      const result = await articleCollections.findOne(filter);
       res.send(result);
     });
     app.patch("/articles/:id",verifyToken, async (req, res) => {
       const id = req.params.id;
       const { likes } = req.body;
-      const query = { _id: new ObjectId(id) };
+      const filter = { _id: new ObjectId(id) };
       const updatedDoc = {
         $set: {
           likes,
         },
       };
-      const result = await articleCollections.updateOne(query, updatedDoc);
+      const result = await articleCollections.updateOne(filter, updatedDoc);
       res.send(result);
     });
     app.post("/comments",verifyToken, async (req, res) => {
@@ -94,7 +113,7 @@ async function run() {
     });
 
     // my articles api
-    app.get("/myarticles", verifyToken,async (req, res) => {
+    app.get("/myarticles",verifyToken,verifyEmail, async (req, res) => {
       const email = req.query.email;
 
       const query = { authorEmail: email };
@@ -106,7 +125,7 @@ async function run() {
       const filter = { _id: new ObjectId(id) };
       const updatedPost = req.body;
       const updatedDoc = {
-        $set: updatedPost,
+        $set: updatedPost
       };
       const result = await articleCollections.updateOne(filter, updatedDoc);
       res.send(result);
@@ -150,8 +169,8 @@ async function run() {
       res.send(result);
     });
     app.post("/jwt", (req, res) => {
-      const user = req.body;
-      const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: "2h" });
+      const {email} = req.body;
+      const token = jwt.sign({email}, process.env.JWT_SECRET, { expiresIn: "2h" });
       res.send({ token });
     });
 

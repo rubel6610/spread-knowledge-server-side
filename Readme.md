@@ -4,8 +4,10 @@
 **Spread Knowledge** is a full-stack web application where users can post, explore, and manage articles across various categories. It promotes knowledge sharing and community engagement through user-generated content.
 
 ## Live URL
-[Visit  Server Site](https://github.com/Programming-Hero-Web-Course4/b11a11-server-side-rubel6610)
-[Visit  Client Site](https://github.com/Programming-Hero-Web-Course4/b11a11-client-side-rubel6610)
+[Visit  Server Site](https://github.com/rubel6610/spread-knowledge-server-side)
+
+[Visit  Client Site](https://github.com/rubel6610/spread-knowledge-client-side)
+
 [Visit  Live Site](https://knowledge-spread.netlify.app)
 
 ---

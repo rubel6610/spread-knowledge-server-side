@@ -3,8 +3,18 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
+const http = require("http");
+const { Server } = require("socket.io");
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: ["http://localhost:5173", "https://knowledge-spread.netlify.app"],
+    credentials: true,
+    methods: ["GET", "POST"]
+  }
+});
 const port = 3000;
 
 //middleware
@@ -62,12 +72,66 @@ async function run() {
     const usersCollections = db.collection("users");
     const articleCollections = db.collection("articles");
     const commentsCollections = db.collection("comments");
+    const messagesCollections = db.collection("messages");
+    const conversationsCollections = db.collection("conversations");
 
     
     app.post("/user", async (req, res) => {
       const userData = req.body;
+      // Check if user already exists
+      const existingUser = await usersCollections.findOne({ email: userData.email });
+      if (existingUser) {
+        return res.send({ message: "User already exists", insertedId: existingUser._id });
+      }
       const result = await usersCollections.insertOne(userData);
       res.send(result);
+    });
+
+    // Get user by email
+    app.get("/user/:email", verifyToken, async (req, res) => {
+      try {
+        const email = req.params.email;
+        const user = await usersCollections.findOne({ email });
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
+        res.send(user);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching user", error: error.message });
+      }
+    });
+
+    // Update user profile
+    app.put("/user/:email", verifyToken, verifyEmail, async (req, res) => {
+      try {
+        const email = req.params.email;
+        const updateData = req.body;
+        const filter = { email };
+        const updatedDoc = {
+          $set: {
+            userName: updateData.userName,
+            photoURL: updateData.photoURL,
+            bio: updateData.bio || "",
+            updatedAt: new Date()
+          }
+        };
+        const result = await usersCollections.updateOne(filter, updatedDoc);
+        
+        // Update photo and name in all messages sent by this user
+        await messagesCollections.updateMany(
+          { sender: email },
+          {
+            $set: {
+              senderName: updateData.userName,
+              senderPhoto: updateData.photoURL
+            }
+          }
+        );
+        
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error updating user", error: error.message });
+      }
     });
 
     //article related api
@@ -174,6 +238,208 @@ async function run() {
       res.send({ token });
     });
 
+    // Analytics API
+    app.get("/analytics/:email", verifyToken, verifyEmail, async (req, res) => {
+      try {
+        const email = req.params.email;
+        
+        // Get total articles
+        const totalArticles = await articleCollections.countDocuments({ authorEmail: email });
+        
+        // Get all user articles
+        const articlesWithLikes = await articleCollections.find({ authorEmail: email }).toArray();
+        
+        // Get total likes
+        const totalLikes = articlesWithLikes.reduce((sum, article) => sum + (article.likes || 0), 0);
+        
+        // Get total comments on user's articles - Fix the query
+        const userArticleIds = articlesWithLikes.map(article => article._id.toString());
+        let totalComments = 0;
+        
+        if (userArticleIds.length > 0) {
+          // Query comments where articleId matches any of the user's article IDs
+          const allComments = await commentsCollections.find({}).toArray();
+          totalComments = allComments.filter(comment => userArticleIds.includes(comment.articleId)).length;
+        }
+        
+        // Get articles by category
+        const articlesByCategory = await articleCollections.aggregate([
+          { $match: { authorEmail: email } },
+          { $group: { _id: "$category", count: { $sum: 1 } } }
+        ]).toArray();
+        
+        // Get recent articles
+        const recentArticles = await articleCollections
+          .find({ authorEmail: email })
+          .sort({ _id: -1 })
+          .limit(5)
+          .toArray();
+
+        res.send({
+          totalArticles,
+          totalLikes,
+          totalComments,
+          articlesByCategory,
+          recentArticles
+        });
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching analytics", error: error.message });
+      }
+    });
+
+    // Chat API endpoints
+    app.get("/users", verifyToken, async (req, res) => {
+      try {
+        const currentUserEmail = req.decoded.email;
+        const users = await usersCollections
+          .find({ email: { $ne: currentUserEmail } })
+          .project({ email: 1, userName: 1, displayName: 1, photoURL: 1 })
+          .toArray();
+        // Map userName to displayName for consistency
+        const mappedUsers = users.map(user => ({
+          ...user,
+          displayName: user.displayName || user.userName || 'Anonymous'
+        }));
+        res.send(mappedUsers);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching users", error: error.message });
+      }
+    });
+
+    app.get("/conversations", verifyToken, async (req, res) => {
+      try {
+        const email = req.decoded.email;
+        const conversations = await conversationsCollections
+          .find({ participants: email })
+          .sort({ lastMessageTime: -1 })
+          .toArray();
+        res.send(conversations);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching conversations", error: error.message });
+      }
+    });
+
+    app.get("/messages/:conversationId", verifyToken, async (req, res) => {
+      try {
+        const { conversationId } = req.params;
+        const messages = await messagesCollections
+          .find({ conversationId })
+          .sort({ timestamp: 1 })
+          .toArray();
+        res.send(messages);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching messages", error: error.message });
+      }
+    });
+
+    app.post("/conversations", verifyToken, async (req, res) => {
+      try {
+        const { participants } = req.body;
+        
+        // Check if conversation already exists
+        const existingConversation = await conversationsCollections.findOne({
+          participants: { $all: participants }
+        });
+
+        if (existingConversation) {
+          return res.send(existingConversation);
+        }
+
+        const newConversation = {
+          participants,
+          lastMessage: "",
+          lastMessageTime: new Date(),
+          createdAt: new Date()
+        };
+
+        const result = await conversationsCollections.insertOne(newConversation);
+        res.send({ ...newConversation, _id: result.insertedId });
+      } catch (error) {
+        res.status(500).send({ message: "Error creating conversation", error: error.message });
+      }
+    });
+
+    // Socket.IO connection handling
+    const connectedUsers = new Map();
+
+    io.on("connection", (socket) => {
+      console.log("User connected:", socket.id);
+
+      socket.on("user_connected", (userEmail) => {
+        connectedUsers.set(userEmail, socket.id);
+        io.emit("online_users", Array.from(connectedUsers.keys()));
+      });
+
+      socket.on("send_message", async (data) => {
+        try {
+          const { conversationId, sender, receiver, message, senderName, senderPhoto } = data;
+          
+          const newMessage = {
+            conversationId,
+            sender,
+            receiver,
+            message,
+            senderName,
+            senderPhoto,
+            timestamp: new Date(),
+            read: false
+          };
+
+          await messagesCollections.insertOne(newMessage);
+          
+          // Update conversation
+          await conversationsCollections.updateOne(
+            { _id: new ObjectId(conversationId) },
+            {
+              $set: {
+                lastMessage: message,
+                lastMessageTime: new Date()
+              }
+            }
+          );
+
+          // Emit to receiver if online
+          const receiverSocketId = connectedUsers.get(receiver);
+          if (receiverSocketId) {
+            io.to(receiverSocketId).emit("receive_message", newMessage);
+          }
+
+          // Emit back to sender for confirmation
+          socket.emit("message_sent", newMessage);
+        } catch (error) {
+          socket.emit("message_error", { error: error.message });
+        }
+      });
+
+      socket.on("typing", (data) => {
+        const { receiver, sender } = data;
+        const receiverSocketId = connectedUsers.get(receiver);
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("user_typing", { sender });
+        }
+      });
+
+      socket.on("stop_typing", (data) => {
+        const { receiver, sender } = data;
+        const receiverSocketId = connectedUsers.get(receiver);
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("user_stop_typing", { sender });
+        }
+      });
+
+      socket.on("disconnect", () => {
+        console.log("User disconnected:", socket.id);
+        // Remove user from connected users
+        for (const [email, socketId] of connectedUsers.entries()) {
+          if (socketId === socket.id) {
+            connectedUsers.delete(email);
+            io.emit("online_users", Array.from(connectedUsers.keys()));
+            break;
+          }
+        }
+      });
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
@@ -189,6 +455,6 @@ app.get("/", (req, res) => {
   res.send("Server is Running");
 });
 
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server is running on port: ${port}`);
 });

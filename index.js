@@ -10,17 +10,17 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "https://knowledge-spread.netlify.app"],
+    origin: ["http://localhost:5173", "https://knowledge-spread.netlify.app",process.env.CLIENT_URL],
     credentials: true,
     methods: ["GET", "POST"]
   }
 });
 const port = 3000;
-
+ 
 //middleware
 app.use(express.json());
 app.use(cors({
-  origin: ["http://localhost:5173", "https://knowledge-spread.netlify.app"],
+  origin: ["http://localhost:5173", "https://knowledge-spread.netlify.app",process.env.CLIENT_URL],
   credentials: true
 }));
 

@@ -1,6 +1,6 @@
 # Spread Knowledge - Server Side
 
-[![Github Server Side](https://img.shields.io/badge/Github-Repository-green)](https://github.com/rubel6610/spread-knowledge-server-side)
+[![Live Server](https://img.shields.io/badge/Live-Server-success)](https://spread-knowledge-server.vercel.app)
 [![Client Side](https://img.shields.io/badge/Client-Repository-blue)](https://github.com/rubel6610/spread-knowledge-client-side)
 [![Live Site](https://img.shields.io/badge/Live-Site-brightgreen)](https://knowledge-spread.netlify.app)
 
@@ -111,9 +111,16 @@ cd spread-knowledge-server
 npm install
 ```
 
+3. **Environment Variables**
+Create a `.env` file in the root directory:
+```env
+DB_USER=your_mongodb_username
+DB_PASS=your_mongodb_password
+JWT_SECRET=your_jwt_secret_key
+CLIENT_URL=your_client_url
+```
 
-
-3. **Run the server**
+4. **Run the server**
 ```bash
 npm start
 ```
@@ -180,6 +187,117 @@ disconnect          - User goes offline
 ```
 
 ---
+
+## 💾 Database Collections
+
+### users
+```javascript
+{
+  email: String,
+  userName: String,
+  photoURL: String,
+  bio: String,
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+### articles
+```javascript
+{
+  title: String,
+  content: String,
+  category: String,
+  tags: [String],
+  thumbnail: String,
+  authorName: String,
+  authorEmail: String,
+  likes: Number,
+  date: Date
+}
+```
+
+### comments
+```javascript
+{
+  articleId: String,
+  commenterName: String,
+  commenterEmail: String,
+  comment: String,
+  timestamp: Date
+}
+```
+
+### conversations
+```javascript
+{
+  participants: [String],
+  lastMessage: String,
+  lastMessageTime: Date,
+  createdAt: Date
+}
+```
+
+### messages
+```javascript
+{
+  conversationId: ObjectId,
+  sender: String,
+  receiver: String,
+  message: String,
+  senderName: String,
+  senderPhoto: String,
+  timestamp: Date,
+  read: Boolean
+}
+```
+
+---
+
+## 🔒 Security Features
+
+- **JWT Token Verification** - All protected routes require valid JWT tokens
+- **Email Verification** - Users can only access/modify their own data
+- **CORS Configuration** - Restricted to authorized client URLs
+- **Environment Variables** - Sensitive data stored securely
+
+---
+
+## 🌐 Deployment
+
+The server is deployed on **Vercel** with the following configuration:
+
+```json
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "index.js"
+    }
+  ]
+}
+```
+
+---
+
+## 👨‍💻 Author
+
+**Rubel Hossain**
+- GitHub: [@rubel6610](https://github.com/rubel6610)
+- LinkedIn: [rubelhosen13](https://linkedin.com/in/rubelhosen13)
+
+---
+
+## 📝 License
+
+This project is licensed under the ISC License.
 
 
 ## 🚀 Future Enhancements
